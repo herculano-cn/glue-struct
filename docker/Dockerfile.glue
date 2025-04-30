@@ -1,0 +1,41 @@
+FROM amazon/aws-glue-libs:glue_libs_4.0.0_image_01
+
+USER root
+
+# Drivers MySQL e PostgreSQL
+RUN apt-get update && \
+    apt-get install -y wget unzip procps curl && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
+# Download MySQL Connector/J
+RUN wget https://dev.mysql.com/get/Downloads/Connector-J/mysql-connector-j-8.0.33.tar.gz -O /tmp/mysql-connector-j.tar.gz && \
+    tar -xf /tmp/mysql-connector-j.tar.gz -C /tmp && \
+    cp /tmp/mysql-connector-j-8.0.33/mysql-connector-j-8.0.33.jar /opt/spark/jars/ && \
+    rm -rf /tmp/mysql-connector-j*
+
+# Download PostgreSQL JDBC Driver
+RUN wget https://jdbc.postgresql.org/download/postgresql-42.6.0.jar -O /opt/spark/jars/postgresql-42.6.0.jar
+
+# Install additional Python packages
+RUN pip install jupyter_contrib_nbextensions jupyter-server-proxy boto3 dash plotly pandas-profiling matplotlib pandas==1.4.4 pyarrow==11.0.0
+
+# Criar diretório para Jupyter
+RUN mkdir -p /home/glue_user/jupyter
+
+# Configurar Jupyter
+RUN jupyter contrib nbextension install --user && \
+    jupyter nbextension enable --py widgetsnbextension && \
+    cp -r /home/glue_user/.local/share/jupyter /home/glue_user/jupyter
+
+# Adicionar script para configurar ambiente Glue
+COPY scripts/setup-glue.sh /home/glue_user/
+RUN chmod +x /home/glue_user/setup-glue.sh && \
+    /home/glue_user/setup-glue.sh
+
+# Voltar para o usuário glue_user
+USER glue_user
+WORKDIR /home/glue_user/workspace
+
+# Ponto de entrada padrão
+ENTRYPOINT ["bash", "-c"]
