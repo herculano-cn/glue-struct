@@ -4,9 +4,12 @@ USER root
 
 # Drivers MySQL e PostgreSQL
 RUN yum update -y && \
-    yum install -y wget unzip procps-ng curl && \
+    yum install -y wget unzip procps-ng curl python3 python3-pip && \
     yum clean all && \
     rm -rf /var/cache/yum
+
+# Criar diretório para os drivers JDBC
+RUN mkdir -p /opt/spark/jars
 
 # Download MySQL Connector/J
 RUN wget https://dev.mysql.com/get/Downloads/Connector-J/mysql-connector-j-8.0.33.tar.gz -O /tmp/mysql-connector-j.tar.gz && \
@@ -18,7 +21,7 @@ RUN wget https://dev.mysql.com/get/Downloads/Connector-J/mysql-connector-j-8.0.3
 RUN wget https://jdbc.postgresql.org/download/postgresql-42.6.0.jar -O /opt/spark/jars/postgresql-42.6.0.jar
 
 # Install additional Python packages
-RUN pip install jupyter_contrib_nbextensions jupyter-server-proxy boto3 dash plotly pandas-profiling matplotlib pandas==1.4.4 pyarrow==11.0.0
+RUN pip3 install jupyter_contrib_nbextensions jupyter-server-proxy boto3 dash plotly pandas-profiling matplotlib pandas==1.4.4 pyarrow==11.0.0
 
 # Criar diretório para Jupyter
 RUN mkdir -p /home/glue_user/jupyter
