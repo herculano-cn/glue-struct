@@ -3,10 +3,10 @@ FROM amazon/aws-glue-libs:glue_libs_4.0.0_image_01
 USER root
 
 # Drivers MySQL e PostgreSQL
-RUN apt-get update && \
-    apt-get install -y wget unzip procps curl && \
-    apt-get clean && \
-    rm -rf /var/lib/apt/lists/*
+RUN yum update -y && \
+    yum install -y wget unzip procps-ng curl && \
+    yum clean all && \
+    rm -rf /var/cache/yum
 
 # Download MySQL Connector/J
 RUN wget https://dev.mysql.com/get/Downloads/Connector-J/mysql-connector-j-8.0.33.tar.gz -O /tmp/mysql-connector-j.tar.gz && \
