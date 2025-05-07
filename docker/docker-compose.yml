@@ -62,21 +62,6 @@ services:
       timeout: 5s
       retries: 5
 
-  # MySQL Admin Interface
-  phpmyadmin:
-    image: phpmyadmin/phpmyadmin
-    container_name: phpmyadmin
-    restart: always
-    environment:
-      - PMA_HOST=mysql
-      - PMA_PORT=3306
-    ports:
-      - "8080:80"
-    networks:
-      - glue-network
-    depends_on:
-      - mysql
-
   # PostgreSQL
   postgres:
     image: postgres:14
@@ -99,23 +84,6 @@ services:
       timeout: 5s
       retries: 5
 
-  # PostgreSQL Admin Interface
-  pgadmin:
-    image: dpage/pgadmin4
-    container_name: pgadmin
-    restart: always
-    environment:
-      - PGADMIN_DEFAULT_EMAIL=admin@example.com
-      - PGADMIN_DEFAULT_PASSWORD=admin
-    ports:
-      - "8081:80"
-    volumes:
-      - pgadmin_data:/var/lib/pgadmin
-    networks:
-      - glue-network
-    depends_on:
-      - postgres
-
 networks:
   glue-network:
     driver: bridge
@@ -123,4 +91,3 @@ networks:
 volumes:
   mysql_data:
   postgres_data:
-  pgadmin_data:

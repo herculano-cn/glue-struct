@@ -3,8 +3,22 @@
 # Script para configurar o ambiente AWS Glue local
 
 # Configure environment variables for AWS Glue
-echo "export PYTHONPATH=/home/glue_user/workspace:$PYTHONPATH" >> /home/glue_user/.bashrc
-echo "export SPARK_CONF_DIR=/etc/spark/conf" >> /home/glue_user/.bashrc
+cat > /home/glue_user/.bashrc << 'EOL'
+# .bashrc
+
+# Source global definitions
+if [ -f /etc/bashrc ]; then
+    . /etc/bashrc
+fi
+
+# User specific environment
+PATH="$HOME/.local/bin:$HOME/bin:$PATH"
+export PATH
+
+# Glue specific environment variables
+export PYTHONPATH=/home/glue_user/workspace:$PYTHONPATH
+export SPARK_CONF_DIR=/etc/spark/conf
+EOL
 
 # Create working directories
 mkdir -p /home/glue_user/workspace/jobs
@@ -105,9 +119,9 @@ cat > /home/glue_user/workspace/shared/notebooks/glue_test.ipynb << EOF
  ],
  "metadata": {
   "kernelspec": {
-   "display_name": "Python 3\",
-   "language": "python\",
-   "name": "python3\"
+   "display_name": "Python 3",
+   "language": "python",
+   "name": "python3"
   }
  },
  "nbformat": 4,

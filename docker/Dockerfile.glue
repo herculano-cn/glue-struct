@@ -4,7 +4,7 @@ USER root
 
 # Drivers MySQL e PostgreSQL
 RUN yum update -y && \
-    yum install -y wget unzip procps-ng curl python3 python3-pip && \
+    yum install -y wget unzip procps-ng curl python3 python3-pip python3-devel gcc && \
     yum clean all && \
     rm -rf /var/cache/yum
 
@@ -20,8 +20,37 @@ RUN wget https://dev.mysql.com/get/Downloads/Connector-J/mysql-connector-j-8.0.3
 # Download PostgreSQL JDBC Driver
 RUN wget https://jdbc.postgresql.org/download/postgresql-42.6.0.jar -O /opt/spark/jars/postgresql-42.6.0.jar
 
+# Configurar ambiente Python
+ENV PYTHONUSERBASE=/home/glue_user/.local
+ENV PATH=/home/glue_user/.local/bin:$PATH
+ENV PYTHONPATH=/home/glue_user/workspace
+
+# Criar usuário e grupo glue_user se não existirem
+RUN groupadd -r glue_user || true && \
+    useradd -r -g glue_user -d /home/glue_user glue_user || true
+
+# Criar diretórios necessários
+RUN mkdir -p /home/glue_user/.local /home/glue_user/workspace && \
+    chown -R glue_user:glue_user /home/glue_user
+
 # Install additional Python packages
-RUN pip3 install jupyter_contrib_nbextensions jupyter-server-proxy boto3 dash plotly pandas-profiling matplotlib pandas==1.4.4 pyarrow==11.0.0
+RUN pip3 install --user --no-cache-dir \
+    jupyter-server==2.0.0 \
+    notebook==6.5.4 \
+    jupyter==1.0.0 \
+    jupyter_contrib_nbextensions \
+    jupyter-server-proxy \
+    boto3 \
+    dash \
+    plotly \
+    pandas-profiling \
+    matplotlib \
+    pandas==1.4.4 \
+    pyarrow==11.0.0 \
+    ipykernel \
+    jupyterlab \
+    traitlets==5.9.0 \
+    jupyter-core==5.3.0
 
 # Criar diretório para Jupyter
 RUN mkdir -p /home/glue_user/jupyter
@@ -40,5 +69,9 @@ RUN chmod +x /home/glue_user/setup-glue.sh && \
 USER glue_user
 WORKDIR /home/glue_user/workspace
 
+# Criar script de inicialização
+COPY --chown=glue_user:glue_user docker/start.sh /home/glue_user/start.sh
+RUN chmod +x /home/glue_user/start.sh
+
 # Ponto de entrada padrão
-ENTRYPOINT ["bash", "-c"]
+ENTRYPOINT ["/home/glue_user/start.sh"]
