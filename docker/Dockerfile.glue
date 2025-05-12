@@ -2,76 +2,84 @@ FROM amazon/aws-glue-libs:glue_libs_4.0.0_image_01
 
 USER root
 
-# Drivers MySQL e PostgreSQL
-RUN yum update -y && \
-    yum install -y wget unzip procps-ng curl python3 python3-pip python3-devel gcc && \
-    yum clean all && \
-    rm -rf /var/cache/yum
+# Configurações para WSL
+ENV DOCKER_HOST=unix:///var/run/docker.sock
+ENV WSL_DISTRO_NAME=docker-desktop
+
+# Instalar dependências
+RUN yum update -y || true && \
+    yum install -y \
+        wget \
+        unzip \
+        procps-ng \
+        curl \
+        tar \
+        gzip \
+        python3 \
+        python3-pip \
+        python3-devel \
+        gcc \
+        gcc-c++ \
+        which \
+        sudo \
+    && yum clean all \
+    && rm -rf /var/cache/yum
 
 # Criar diretório para os drivers JDBC
 RUN mkdir -p /opt/spark/jars
 
 # Download MySQL Connector/J
-RUN wget https://dev.mysql.com/get/Downloads/Connector-J/mysql-connector-j-8.0.33.tar.gz -O /tmp/mysql-connector-j.tar.gz && \
-    tar -xf /tmp/mysql-connector-j.tar.gz -C /tmp && \
-    cp /tmp/mysql-connector-j-8.0.33/mysql-connector-j-8.0.33.jar /opt/spark/jars/ && \
-    rm -rf /tmp/mysql-connector-j*
+RUN cd /tmp && \
+    wget --no-check-certificate https://dev.mysql.com/get/Downloads/Connector-J/mysql-connector-j-8.0.33.tar.gz && \
+    tar -xzf mysql-connector-j-8.0.33.tar.gz && \
+    cp mysql-connector-j-8.0.33/mysql-connector-j-8.0.33.jar /opt/spark/jars/ && \
+    rm -rf mysql-connector-j*
 
 # Download PostgreSQL JDBC Driver
-RUN wget https://jdbc.postgresql.org/download/postgresql-42.6.0.jar -O /opt/spark/jars/postgresql-42.6.0.jar
+RUN wget --no-check-certificate https://jdbc.postgresql.org/download/postgresql-42.6.0.jar -O /opt/spark/jars/postgresql-42.6.0.jar
+
+# Criar usuário glue_user
+RUN groupadd -r glue_user || true && \
+    useradd -r -g glue_user -d /home/glue_user -s /bin/bash glue_user || true && \
+    echo "glue_user ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
 
 # Configurar ambiente Python
 ENV PYTHONUSERBASE=/home/glue_user/.local
 ENV PATH=/home/glue_user/.local/bin:$PATH
 ENV PYTHONPATH=/home/glue_user/workspace
 
-# Criar usuário e grupo glue_user se não existirem
-RUN groupadd -r glue_user || true && \
-    useradd -r -g glue_user -d /home/glue_user glue_user || true
-
 # Criar diretórios necessários
-RUN mkdir -p /home/glue_user/.local /home/glue_user/workspace && \
-    chown -R glue_user:glue_user /home/glue_user
+RUN mkdir -p /home/glue_user/.local /home/glue_user/workspace /home/glue_user/.jupyter /tmp/spark
 
-# Install additional Python packages
-RUN pip3 install --user --no-cache-dir \
-    jupyter-server==2.0.0 \
-    notebook==6.5.4 \
-    jupyter==1.0.0 \
-    jupyter_contrib_nbextensions \
-    jupyter-server-proxy \
-    boto3 \
-    dash \
-    plotly \
-    pandas-profiling \
-    matplotlib \
-    pandas==1.4.4 \
-    pyarrow==11.0.0 \
-    ipykernel \
-    jupyterlab \
-    traitlets==5.9.0 \
-    jupyter-core==5.3.0
+# Instalar pacotes Python
+RUN pip3 install --upgrade pip && \
+    pip3 install --user --no-cache-dir \
+        jupyter \
+        notebook \
+        jupyterlab \
+        ipykernel \
+        pandas \
+        pyarrow \
+        matplotlib \
+        plotly \
+        boto3
 
-# Criar diretório para Jupyter
-RUN mkdir -p /home/glue_user/jupyter
+# Copiar scripts
+COPY --chown=glue_user:glue_user scripts/setup-glue.sh /home/glue_user/
+COPY --chown=glue_user:glue_user docker/start.sh /home/glue_user/
 
-# Configurar Jupyter
-RUN jupyter contrib nbextension install --user && \
-    jupyter nbextension enable --py widgetsnbextension && \
-    cp -r /home/glue_user/.local/share/jupyter /home/glue_user/jupyter
+# Tornar scripts executáveis
+RUN chmod +x /home/glue_user/setup-glue.sh /home/glue_user/start.sh
 
-# Adicionar script para configurar ambiente Glue
-COPY scripts/setup-glue.sh /home/glue_user/
-RUN chmod +x /home/glue_user/setup-glue.sh && \
-    /home/glue_user/setup-glue.sh
+# Executar setup
+RUN /home/glue_user/setup-glue.sh
 
-# Voltar para o usuário glue_user
+# Ajustar permissões
+RUN chown -R glue_user:glue_user /home/glue_user /tmp/spark
+
+# Mudar para usuário glue_user
 USER glue_user
 WORKDIR /home/glue_user/workspace
 
-# Criar script de inicialização
-COPY --chown=glue_user:glue_user docker/start.sh /home/glue_user/start.sh
-RUN chmod +x /home/glue_user/start.sh
-
-# Ponto de entrada padrão
+# Entrada
 ENTRYPOINT ["/home/glue_user/start.sh"]

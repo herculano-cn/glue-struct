@@ -2,6 +2,14 @@
 
 # Script para configurar o ambiente AWS Glue local
 
+# Verificar se está rodando como root ou glue_user
+if [ "$(id -u)" = "0" ]; then
+    SPARK_CONF_DIR_PATH="/etc/spark/conf"
+else
+    SPARK_CONF_DIR_PATH="/home/glue_user/.spark/conf"
+    mkdir -p $SPARK_CONF_DIR_PATH
+fi
+
 # Configure environment variables for AWS Glue
 cat > /home/glue_user/.bashrc << 'EOL'
 # .bashrc
@@ -15,20 +23,34 @@ fi
 PATH="$HOME/.local/bin:$HOME/bin:$PATH"
 export PATH
 
-# Glue specific environment variables
+# Python environment
+export PYTHONUSERBASE=/home/glue_user/.local
 export PYTHONPATH=/home/glue_user/workspace:$PYTHONPATH
+
+# Glue & Spark environment variables
+export SPARK_HOME=/opt/spark
 export SPARK_CONF_DIR=/etc/spark/conf
+export SPARK_LOCAL_IP=127.0.0.1
+
+# Java options for better compatibility
+export SPARK_DRIVER_MEMORY=4g
+export SPARK_EXECUTOR_MEMORY=4g
+
+# AWS Glue specific
+export GLUE_HOME=/opt/amazon/lib
+export PATH=$PATH:$SPARK_HOME/bin:$GLUE_HOME
 EOL
 
 # Create working directories
 mkdir -p /home/glue_user/workspace/jobs
 mkdir -p /home/glue_user/workspace/shared/notebooks
 mkdir -p /home/glue_user/workspace/data
+mkdir -p /home/glue_user/.jupyter
 
 # Configure spark-defaults.conf to allow Glue jobs
-cat > /etc/spark/conf/spark-defaults.conf << EOF
-spark.driver.extraClassPath=/opt/spark/jars/*
-spark.executor.extraClassPath=/opt/spark/jars/*
+cat > $SPARK_CONF_DIR_PATH/spark-defaults.conf << EOF
+spark.driver.extraClassPath=/opt/spark/jars/*:/opt/amazon/spark/jars/*
+spark.executor.extraClassPath=/opt/spark/jars/*:/opt/amazon/spark/jars/*
 spark.driver.extraJavaOptions=-Dlog4j.configuration=file:///etc/spark/conf/log4j.properties
 spark.executor.extraJavaOptions=-Dlog4j.configuration=file:///etc/spark/conf/log4j.properties
 spark.driver.cores=1
@@ -37,10 +59,25 @@ spark.executor.cores=1
 spark.executor.memory=4g
 spark.dynamicAllocation.enabled=false
 spark.shuffle.service.enabled=false
+spark.sql.warehouse.dir=/home/glue_user/spark-warehouse
+spark.local.dir=/tmp/spark
+spark.driver.host=localhost
 EOF
 
-# Create a sample notebook for testing
-cat > /home/glue_user/workspace/shared/notebooks/glue_test.ipynb << EOF
+# Configure Jupyter
+cat > /home/glue_user/.jupyter/jupyter_notebook_config.py << 'EOF'
+c = get_config()
+c.NotebookApp.ip = '0.0.0.0'
+c.NotebookApp.port = 8888
+c.NotebookApp.open_browser = False
+c.NotebookApp.allow_root = True
+c.NotebookApp.token = ''
+c.NotebookApp.password = ''
+c.NotebookApp.notebook_dir = '/home/glue_user/workspace'
+EOF
+
+# Create a sample notebook for testing (mantém o mesmo)
+cat > /home/glue_user/workspace/shared/notebooks/glue_test.ipynb << 'EOF'
 {
  "cells": [
   {
@@ -56,6 +93,7 @@ cat > /home/glue_user/workspace/shared/notebooks/glue_test.ipynb << EOF
    "cell_type": "code",
    "execution_count": null,
    "metadata": {},
+   "outputs": [],
    "source": [
     "import sys\n",
     "from pyspark.context import SparkContext\n",
@@ -64,56 +102,13 @@ cat > /home/glue_user/workspace/shared/notebooks/glue_test.ipynb << EOF
     "from awsglue.utils import getResolvedOptions\n",
     "\n",
     "# Inicializar Glue Context\n",
-    "sc = SparkContext()\n",
+    "sc = SparkContext.getOrCreate()\n",
     "glueContext = GlueContext(sc)\n",
     "spark = glueContext.spark_session\n",
     "job = Job(glueContext)\n",
     "\n",
-    "print(\"AWS Glue inicializado com sucesso!\")"
-   ]
-  },
-  {
-   "cell_type": "code",
-   "execution_count": null,
-   "metadata": {},
-   "source": [
-    "# Testar conexão com MySQL\n",
-    "mysql_url = \"jdbc:mysql://mysql:3306/ai_cockpit\"\n",
-    "mysql_properties = {\n",
-    "    \"user\": \"root\",\n",
-    "    \"password\": \"rootpassword\",\n",
-    "    \"driver\": \"com.mysql.cj.jdbc.Driver\"\n",
-    "}\n",
-    "\n",
-    "try:\n",
-    "    df_mysql = spark.read.jdbc(url=mysql_url, table=\"users\", properties=mysql_properties)\n",
-    "    print(\"Conexão com MySQL bem-sucedida!\")\n",
-    "    print(f\"Total de registros na tabela users: {df_mysql.count()}\")\n",
-    "    df_mysql.show(5)\n",
-    "except Exception as e:\n",
-    "    print(f\"Erro ao conectar ao MySQL: {str(e)}\")\n"
-   ]
-  },
-  {
-   "cell_type": "code",
-   "execution_count": null,
-   "metadata": {},
-   "source": [
-    "# Testar conexão com PostgreSQL\n",
-    "postgres_url = \"jdbc:postgresql://postgres:5432/langfuse\"\n",
-    "postgres_properties = {\n",
-    "    \"user\": \"postgres\",\n",
-    "    \"password\": \"postgres\",\n",
-    "    \"driver\": \"org.postgresql.Driver\"\n",
-    "}\n",
-    "\n",
-    "try:\n",
-    "    df_postgres = spark.read.jdbc(url=postgres_url, table=\"traces\", properties=postgres_properties)\n",
-    "    print(\"Conexão com PostgreSQL bem-sucedida!\")\n",
-    "    print(f\"Total de registros na tabela traces: {df_postgres.count()}\")\n",
-    "    df_postgres.show(5)\n",
-    "except Exception as e:\n",
-    "    print(f\"Erro ao conectar ao PostgreSQL: {str(e)}\")\n"
+    "print(\"AWS Glue inicializado com sucesso!\")\n",
+    "print(f\"Spark version: {spark.version}\")"
    ]
   }
  ],
@@ -129,7 +124,16 @@ cat > /home/glue_user/workspace/shared/notebooks/glue_test.ipynb << EOF
 }
 EOF
 
-# Adjust permissions
-chown -R glue_user:glue_user /home/glue_user/workspace
+# Create additional directories for WSL compatibility
+mkdir -p /tmp/spark
+mkdir -p /home/glue_user/spark-warehouse
 
-echo "Configuration of AWS Glue local environment completed!" 
+# Adjust permissions
+if [ "$(id -u)" = "0" ]; then
+    chown -R glue_user:glue_user /home/glue_user
+    chmod -R 755 /home/glue_user/workspace
+    chmod -R 775 /tmp/spark
+    chown -R glue_user:glue_user /tmp/spark
+fi
+
+echo "Configuration of AWS Glue local environment completed!"
